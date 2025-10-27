@@ -24,3 +24,9 @@ _.ntvs_
 _.njsproj
 _.sln
 \*.sw?
+.env.local
+functions/.env
+.env
+dist/
+serviceAccountKey.json
+*-firebase-adminsdk-*.json

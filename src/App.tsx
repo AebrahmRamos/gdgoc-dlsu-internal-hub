@@ -1,4 +1,4 @@
-import { Authenticated, GitHubBanner, Refine } from "@refinedev/core";
+import { Authenticated, Refine } from "@refinedev/core";
 import { DevtoolsPanel, DevtoolsProvider } from "@refinedev/devtools";
 import { RefineKbar, RefineKbarProvider } from "@refinedev/kbar";
 
@@ -18,22 +18,21 @@ import routerProvider, {
   UnsavedChangesNotifier,
 } from "@refinedev/react-router";
 import dataProvider from "@refinedev/simple-rest";
+import firebaseProvider from "./firebaseProvider";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router";
 import { authProvider } from "./authProvider";
 import { Header } from "./components/header";
+import { Title } from "./components/title";
 import { ColorModeContextProvider } from "./contexts/color-mode";
 import {
-  BlogPostCreate,
-  BlogPostEdit,
-  BlogPostList,
-  BlogPostShow,
-} from "./pages/blog-posts";
-import {
-  CategoryCreate,
-  CategoryEdit,
-  CategoryList,
-  CategoryShow,
-} from "./pages/categories";
+  PartnerCreate,
+  PartnerEdit,
+  PartnerList,
+  PartnerShow,
+} from "./pages/partners";
+import { TeamList, TeamShow } from "./pages/team";
+import { AssetHubList } from "./pages/assets";
+import { Dashboard } from "./pages/dashboard";
 import { ForgotPassword } from "./pages/forgotPassword";
 import { Login } from "./pages/login";
 import { Register } from "./pages/register";
@@ -41,7 +40,6 @@ import { Register } from "./pages/register";
 function App() {
   return (
     <BrowserRouter>
-      <GitHubBanner />
       <RefineKbarProvider>
         <ColorModeContextProvider>
           <CssBaseline />
@@ -49,28 +47,35 @@ function App() {
           <RefineSnackbarProvider>
             <DevtoolsProvider>
               <Refine
-                dataProvider={dataProvider("https://api.fake-rest.refine.dev")}
+                dataProvider={firebaseProvider()}
                 notificationProvider={useNotificationProvider}
                 routerProvider={routerProvider}
                 authProvider={authProvider}
                 resources={[
                   {
-                    name: "blog_posts",
-                    list: "/blog-posts",
-                    create: "/blog-posts/create",
-                    edit: "/blog-posts/edit/:id",
-                    show: "/blog-posts/show/:id",
+                    name: "partners",
+                    list: "/partners",
+                    create: "/partners/create",
+                    edit: "/partners/edit/:id",
+                    show: "/partners/show/:id",
                     meta: {
                       canDelete: true,
+                      label: "Partners",
                     },
                   },
                   {
-                    name: "categories",
-                    list: "/categories",
-                    create: "/categories/create",
-                    edit: "/categories/edit/:id",
-                    show: "/categories/show/:id",
+                    name: "team",
+                    list: "/team",
+                    show: "/team/show/:id",
                     meta: {
+                      label: "Team Directory",
+                    },
+                  },
+                  {
+                    name: "files",
+                    list: "/assets",
+                    meta: {
+                      label: "Asset Hub",
                       canDelete: true,
                     },
                   },
@@ -88,27 +93,25 @@ function App() {
                         key="authenticated-inner"
                         fallback={<CatchAllNavigate to="/login" />}
                       >
-                        <ThemedLayout Header={Header}>
+                        <ThemedLayout Header={Header} Title={Title}>
                           <Outlet />
                         </ThemedLayout>
                       </Authenticated>
                     }
                   >
-                    <Route
-                      index
-                      element={<NavigateToResource resource="blog_posts" />}
-                    />
-                    <Route path="/blog-posts">
-                      <Route index element={<BlogPostList />} />
-                      <Route path="create" element={<BlogPostCreate />} />
-                      <Route path="edit/:id" element={<BlogPostEdit />} />
-                      <Route path="show/:id" element={<BlogPostShow />} />
+                    <Route index element={<Dashboard />} />
+                    <Route path="/partners">
+                      <Route index element={<PartnerList />} />
+                      <Route path="create" element={<PartnerCreate />} />
+                      <Route path="edit/:id" element={<PartnerEdit />} />
+                      <Route path="show/:id" element={<PartnerShow />} />
                     </Route>
-                    <Route path="/categories">
-                      <Route index element={<CategoryList />} />
-                      <Route path="create" element={<CategoryCreate />} />
-                      <Route path="edit/:id" element={<CategoryEdit />} />
-                      <Route path="show/:id" element={<CategoryShow />} />
+                    <Route path="/team">
+                      <Route index element={<TeamList />} />
+                      <Route path="show/:id" element={<TeamShow />} />
+                    </Route>
+                    <Route path="/assets">
+                      <Route index element={<AssetHubList />} />
                     </Route>
                     <Route path="*" element={<ErrorComponent />} />
                   </Route>
