@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   useDataGrid,
   List,
-  DeleteButton,
 } from "@refinedev/mui";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import {
@@ -17,9 +16,16 @@ import {
   Alert,
   Typography,
   IconButton,
+  Tooltip,
 } from "@mui/material";
+import Snackbar from "@mui/material/Snackbar";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import { useCreate, useGetIdentity } from "@refinedev/core";
+import DeleteIcon from "@mui/icons-material/Delete";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import GetAppIcon from "@mui/icons-material/GetApp";
+import { useCreate, useGetIdentity, useDelete } from "@refinedev/core";
+import CloseIcon from '@mui/icons-material/Close';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "../../firebase";
 
@@ -43,7 +49,210 @@ export const AssetHubList = () => {
   });
 
   const { mutate: createFileRecord } = useCreate();
+  const { mutate: deleteResource } = useDelete();
   const { data: identity } = useGetIdentity<{ email: string }>();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    filePath: string;
+    fileName?: string | null;
+  } | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+  const [previewingIds, setPreviewingIds] = useState<Record<string, boolean>>({});
+  const [downloadingIds, setDownloadingIds] = useState<Record<string, boolean>>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFileType, setPreviewFileType] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  // Snackbar / error UX
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [lastFailed, setLastFailed] = useState<any | null>(null);
+
+  const handleDownload = async (filePath: string) => {
+    setDownloadingIds((s) => ({ ...s, [filePath]: true }));
+    try {
+      const getDownload = httpsCallable(functions, "getPresignedDownloadURL");
+      const result = await getDownload({ key: filePath, disposition: "attachment", ttlSeconds: 120 });
+      const url = (result.data as any)?.url;
+      if (url) {
+        window.open(url, "_blank");
+      } else {
+        throw new Error("No download URL returned");
+      }
+    } catch (error: any) {
+      console.error("Failed to get download URL:", error);
+  const message = error?.message || "Failed to get download URL";
+  setUploadError(message);
+  setSnackbarMessage(message);
+  setLastFailed({ type: "download", filePath });
+  setSnackbarOpen(true);
+    } finally {
+      setDownloadingIds((s) => {
+        const copy = { ...s };
+        delete copy[filePath];
+        return copy;
+      });
+    }
+  };
+
+  const openDeleteDialog = (id: string, filePath: string, fileName?: string) => {
+    setDeleteTarget({ id, filePath, fileName });
+    setDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { id, filePath } = deleteTarget;
+
+    // mark as deleting
+    setDeletingIds((s) => ({ ...s, [id]: true }));
+    setUploadError(null);
+
+    try {
+      // Call callable to delete object (best-effort). Provide both fileId and filePath for server-side delete function.
+      try {
+        const deleteFn = httpsCallable(functions, "deleteFile");
+        await deleteFn({ fileId: id, filePath });
+      } catch (err) {
+        // If callable failed, still attempt to remove Firestore record so UI stays consistent.
+        console.warn("deleteFile callable failed (continuing to remove metadata):", err);
+      }
+
+      // Remove Firestore metadata record
+      deleteResource(
+        {
+          resource: "files",
+          id,
+        },
+        {
+          onSuccess: () => {
+            // clean up deleting state and close dialog
+            setDeletingIds((s) => {
+              const copy = { ...s };
+              delete copy[id];
+              return copy;
+            });
+            closeDeleteDialog();
+          },
+          onError: (error: any) => {
+            console.error("Failed to delete file record:", error);
+            setUploadError(error.message || "Failed to delete file record");
+            setDeletingIds((s) => {
+              const copy = { ...s };
+              delete copy[id];
+              return copy;
+            });
+            closeDeleteDialog();
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error("Error during delete flow:", error);
+      setUploadError(error.message || "Failed to delete file");
+      setDeletingIds((s) => {
+        const copy = { ...s };
+        delete copy[id];
+        return copy;
+      });
+      closeDeleteDialog();
+    }
+  };
+
+  const handlePreview = async (
+    filePath: string,
+    fileType?: string | null,
+    fileName?: string | null,
+    publicUrl?: string | null
+  ) => {
+    // mark previewing state for this filePath
+    setPreviewingIds((s) => ({ ...s, [filePath]: true }));
+    // open modal immediately so spinner shows
+    setPreviewUrl(null);
+    setPreviewFileType(null);
+    setPreviewFileName(fileName ?? null);
+    setPreviewOpen(true);
+
+    try {
+      // If a public URL is supplied (CDN or public origin), use it directly for fast preview
+      if (publicUrl) {
+        // If fileType is missing, try to infer from the file extension in the URL or filePath
+        let inferredType = fileType ?? null;
+        if (!inferredType) {
+          const extMatch = (publicUrl || filePath).split("?")[0].match(/\.([0-9a-zA-Z]+)$/);
+          const ext = extMatch?.[1]?.toLowerCase() || null;
+          if (ext) {
+            const map: Record<string, string> = {
+              jpg: "image/jpeg",
+              jpeg: "image/jpeg",
+              png: "image/png",
+              gif: "image/gif",
+              webp: "image/webp",
+              svg: "image/svg+xml",
+              pdf: "application/pdf",
+            };
+            inferredType = map[ext] ?? null;
+          }
+        }
+
+        setPreviewUrl(publicUrl);
+        setPreviewFileType(inferredType);
+        setPreviewFileName(fileName ?? null);
+        return;
+      }
+
+      const getDownload = httpsCallable(functions, "getPresignedDownloadURL");
+      const result = await getDownload({ key: filePath, disposition: "inline", ttlSeconds: 120 });
+      const url = (result.data as any)?.url;
+      if (url) {
+        // If fileType is missing, try to infer from the url
+        let inferredType = fileType ?? null;
+        if (!inferredType) {
+          const extMatch = url.split("?")[0].match(/\.([0-9a-zA-Z]+)$/);
+          const ext = extMatch?.[1]?.toLowerCase() || null;
+          if (ext) {
+            const map: Record<string, string> = {
+              jpg: "image/jpeg",
+              jpeg: "image/jpeg",
+              png: "image/png",
+              gif: "image/gif",
+              webp: "image/webp",
+              svg: "image/svg+xml",
+              pdf: "application/pdf",
+            };
+            inferredType = map[ext] ?? null;
+          }
+        }
+
+        // Open modal with inline preview URL
+        setPreviewUrl(url);
+        setPreviewFileType(inferredType);
+        setPreviewFileName(fileName ?? null);
+      } else {
+        throw new Error("No preview URL returned");
+      }
+    } catch (error: any) {
+      console.error("Failed to get preview URL:", error);
+  const message = error?.message || "Failed to get preview URL";
+  setUploadError(message);
+  setSnackbarMessage(message);
+  setLastFailed({ type: "preview", filePath, fileType, fileName, publicUrl });
+  setSnackbarOpen(true);
+  // close modal if we failed to get a URL
+  setPreviewOpen(false);
+    } finally {
+      setPreviewingIds((s) => {
+        const copy = { ...s };
+        delete copy[filePath];
+        return copy;
+      });
+    }
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -186,22 +395,30 @@ export const AssetHubList = () => {
         minWidth: 150,
         sortable: false,
         renderCell: ({ row }) => (
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              href={row.fileURL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download
-            </Button>
-            <DeleteButton
-              recordItemId={row.id}
-              resource="files"
-              hideText
-              size="small"
-            />
+          <Box sx={{ display: "flex", gap: 0.5 }}>
+            <Tooltip title="Preview">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => handlePreview(row.filePath, row.fileType, row.fileName, row.fileURL)}
+                  disabled={Boolean(previewingIds[row.filePath])}
+                >
+                  {previewingIds[row.filePath] ? <CircularProgress size={18} /> : <VisibilityIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Download">
+              <span>
+                <IconButton size="small" onClick={() => handleDownload(row.filePath)} disabled={Boolean(downloadingIds[row.filePath])}>
+                  {downloadingIds[row.filePath] ? <CircularProgress size={18} /> : <GetAppIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton size="small" color="error" onClick={() => openDeleteDialog(row.id, row.filePath, row.fileName)}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Box>
         ),
       },
@@ -285,6 +502,102 @@ export const AssetHubList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Preview dialog */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewUrl(null);
+          setPreviewFileType(null);
+          setPreviewFileName(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>{previewFileName || "Preview"}</DialogTitle>
+        <DialogContent dividers>
+          {previewUrl ? (
+            previewFileType && previewFileType.startsWith("image/") ? (
+              // Image preview
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt={previewFileName || "preview"} style={{ width: "100%" }} />
+            ) : (
+              // Use iframe for PDFs and other types
+              <iframe src={previewUrl} title={previewFileName || "preview"} style={{ width: "100%", height: "70vh", border: "none" }} />
+            )
+          ) : (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewOpen(false)}>Close</Button>
+          <Button
+            onClick={() => {
+              if (previewUrl) window.open(previewUrl, "_blank");
+            }}
+            variant="contained"
+          >
+            Open in new tab
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => !Object.values(deletingIds).some(Boolean) && closeDeleteDialog()} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete file</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{deleteTarget?.fileName || deleteTarget?.filePath}"? This will remove the stored object and the database record.
+          </Typography>
+          {uploadError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {uploadError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDeleteDialog} disabled={Boolean(deleteTarget && deletingIds[deleteTarget.id])}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={confirmDelete}
+            disabled={!deleteTarget || Boolean(deleteTarget && deletingIds[deleteTarget.id])}
+            startIcon={deleteTarget && deletingIds[deleteTarget.id] ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Snackbar for errors with retry */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={8000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+        action={
+          <>
+            <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => {
+              if (lastFailed) {
+                const t = lastFailed.type;
+                if (t === "download") handleDownload(lastFailed.filePath);
+                else if (t === "preview") handlePreview(lastFailed.filePath, lastFailed.fileType, lastFailed.fileName, lastFailed.publicUrl);
+                else if (t === "upload") handleUpload();
+              }
+              setSnackbarOpen(false);
+            }}>
+              Retry
+            </Button>
+            <IconButton size="small" aria-label="close" color="inherit" onClick={() => setSnackbarOpen(false)}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </>
+        }
+      />
     </>
   );
 };
