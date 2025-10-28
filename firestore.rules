@@ -2,18 +2,302 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 11, 26);
+    
+    // ============================================================
+    // HELPER FUNCTIONS - Custom Claims Access
+    // ============================================================
+    // These functions read from request.auth.token (custom claims)
+    // NO get() calls to Firestore - all permissions use claims only
+    // ============================================================
+    
+    /**
+     * Get the user's role from custom claims
+     */
+    function getUserRole() {
+      return request.auth.token.role;
     }
+    
+    /**
+     * Get the user's role type from custom claims
+     */
+    function getUserRoleType() {
+      return request.auth.token.roleType;
+    }
+    
+    /**
+     * Get the user's department from custom claims
+     */
+    function getUserDepartment() {
+      return request.auth.token.department;
+    }
+    
+    /**
+     * Get the user's committee from custom claims (may be null)
+     */
+    function getUserCommittee() {
+      return request.auth.token.committee;
+    }
+    
+    /**
+     * Check if user is signed in
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    /**
+     * Check if user is CEO
+     */
+    function isCEO() {
+      return getUserRole() == 'CEO' || getUserRole() == 'chapter-lead';
+    }
+    
+    /**
+     * Check if user is a CxO (C-suite executive) or CEO
+     */
+    function isCxO() {
+      return getUserRoleType() == 'cxo' || isCEO();
+    }
+    
+    /**
+     * Check if user is a committee head or higher
+     */
+    function isCommitteeHeadOrHigher() {
+      return getUserRoleType() in ['ceo', 'cxo', 'committee_head'];
+    }
+    
+    /**
+     * Check if user has a specific role
+     */
+    function hasRole(role) {
+      return getUserRole() == role;
+    }
+    
+    /**
+     * Check if user is in a specific department
+     */
+    function inDepartment(dept) {
+      return getUserDepartment() == dept;
+    }
+    
+    /**
+     * Check if user is in any of the specified departments
+     */
+    function inAnyDepartment(depts) {
+      return getUserDepartment() in depts;
+    }
+    
+    /**
+     * Helper: Check if update only modifies specific fields
+     * Used for field-level access control (e.g., CHRO restrictions)
+     */
+    function onlyUpdatingFields(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(allowedFields);
+    }
+    
+    /**
+     * Helper: Check if user is trying to modify forbidden fields
+     */
+    function notModifyingFields(forbiddenFields) {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(forbiddenFields);
+    }
+    
+    // ============================================================
+    // TEAM COLLECTION RULES
+    // ============================================================
+    // - All authenticated users can read (list, get)
+    // - Only CEO can create new team members
+    // - CEO can update/delete any team member
+    // - CHRO can update team members but with field restrictions
+    // ============================================================
+    
+    match /team/{userId} {
+      // Anyone authenticated can read team data
+      allow read: if isSignedIn();
+      
+      // Only CEO can create new team members
+      allow create: if isCEO();
+      
+      // Only CEO can delete team members
+      allow delete: if isCEO();
+      
+      // CEO can update any field
+      allow update: if isCEO();
+      
+      // CHRO can update team members, but only specific fields
+      // Cannot modify: email, id, createdAt, claimsUpdatedAt
+      allow update: if hasRole('CHRO') && 
+        onlyUpdatingFields(['name', 'role', 'roleType', 'department', 'committee', 'position']) &&
+        notModifyingFields(['email', 'id', 'createdAt', 'claimsUpdatedAt']);
+    }
+    
+    // ============================================================
+    // PARTNERS COLLECTION RULES
+    // ============================================================
+    // - CEO, CCO, CTO, and Relations department can read
+    // - CEO and Relations department can write
+    // ============================================================
+    
+    match /partners/{partnerId} {
+      // CEO, CCO (Chief Communications Officer), CTO, and Relations can read
+      allow read: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CCO') ||
+        hasRole('CTO') ||
+        inDepartment('Relations')
+      );
+      
+      // CEO and Relations can create
+      allow create: if isCEO() || inDepartment('Relations');
+      
+      // CEO and Relations can update
+      allow update: if isCEO() || inDepartment('Relations');
+      
+      // CEO and Relations can delete
+      allow delete: if isCEO() || inDepartment('Relations');
+    }
+    
+    // ============================================================
+    // FILES/ASSETS COLLECTION RULES
+    // ============================================================
+    // - All authenticated users can read
+    // - CEO, Technology, and Communications can create
+    // - CEO, Technology, and Communications can delete
+    // ============================================================
+    
+    match /files/{fileId} {
+      // All authenticated users can read
+      allow read: if isSignedIn();
+      
+      // CEO, Tech (CTO + Technology dept), Comms (CCO + Communications dept) can create
+      allow create: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CTO') ||
+        hasRole('CCO') ||
+        inDepartment('Technology') ||
+        inDepartment('Communications')
+      );
+      
+      // CEO, Tech, Comms can delete
+      allow delete: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CTO') ||
+        hasRole('CCO') ||
+        inDepartment('Technology') ||
+        inDepartment('Communications')
+      );
+    }
+    
+    // Alias for files (some code may use 'assets' collection)
+    match /assets/{assetId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CTO') ||
+        hasRole('CCO') ||
+        inDepartment('Technology') ||
+        inDepartment('Communications')
+      );
+      
+      allow delete: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CTO') ||
+        hasRole('CCO') ||
+        inDepartment('Technology') ||
+        inDepartment('Communications')
+      );
+    }
+    
+    // ============================================================
+    // BLOG POSTS COLLECTION RULES (Future)
+    // ============================================================
+    
+    match /blog-posts/{postId} {
+      // All authenticated users can read
+      allow read: if isSignedIn();
+      
+      // CEO, CCO, and Communications can create/update
+      allow create, update: if isSignedIn() && (
+        isCEO() ||
+        hasRole('CCO') ||
+        inDepartment('Communications')
+      );
+      
+      // Only CEO can delete
+      allow delete: if isCEO();
+    }
+    
+    // ============================================================
+    // CATEGORIES COLLECTION RULES (Future)
+    // ============================================================
+    
+    match /categories/{categoryId} {
+      // All authenticated users can read
+      allow read: if isSignedIn();
+      
+      // CEO and CCO can create/update
+      allow create, update: if isCEO() || hasRole('CCO');
+      
+      // Only CEO can delete
+      allow delete: if isCEO();
+    }
+    
+    // ============================================================
+    // TASKS COLLECTION RULES (Placeholder for future)
+    // ============================================================
+    
+    match /tasks/{taskId} {
+      // All authenticated users can read
+      allow read: if isSignedIn();
+      
+      // Committee heads and above can create/update
+      allow create, update: if isCommitteeHeadOrHigher();
+      
+      // Committee heads and above can delete
+      allow delete: if isCommitteeHeadOrHigher();
+    }
+    
+    // ============================================================
+    // EVENTS COLLECTION RULES (Placeholder for future)
+    // ============================================================
+    
+    match /events/{eventId} {
+      // All authenticated users can read
+      allow read: if isSignedIn();
+      
+      // CxO and Operations can create/update
+      allow create, update: if isCxO() || inDepartment('Operations');
+      
+      // CEO and COO can delete
+      allow delete: if isCEO() || hasRole('COO');
+    }
+    
+    // ============================================================
+    // BUDGET COLLECTION RULES (Placeholder for future)
+    // ============================================================
+    
+    match /budget/{budgetId} {
+      // CEO, CxO, and Finance can read
+      allow read: if isSignedIn() && (
+        isCxO() ||
+        inDepartment('Finance')
+      );
+      
+      // CEO and CFO can create/update
+      allow create, update: if isCEO() || hasRole('CFO');
+      
+      // Only CEO can delete
+      allow delete: if isCEO();
+    }
+    
+    // ============================================================
+    // DEFAULT DENY
+    // ============================================================
+    // Any collection not explicitly listed above is denied by default
+    // This is the secure-by-default approach
+    // ============================================================
   }
 }
