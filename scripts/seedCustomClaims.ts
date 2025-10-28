@@ -17,9 +17,14 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { getRoleType } from '../functions/src/constants/roleTypes';
+import { getRoleType } from '../src/constants/roleTypes.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// ES Module compatibility
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load service account
 const serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');

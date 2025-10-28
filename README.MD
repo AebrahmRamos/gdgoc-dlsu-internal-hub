@@ -9,40 +9,77 @@
 
 This [Refine](https://github.com/refinedev/refine) project was generated with [create refine-app](https://github.com/refinedev/refine/tree/master/packages/create-refine-app).
 
+# GDG-DLSU Leadership Hub
+
+A secure internal hub for GDG-DLSU, featuring robust RBAC (Role-Based Access Control) using Firebase Custom Claims, Firestore security rules, and automated workflows.
+
+## Features
+
+- 🔒 Role-Based Access Control (RBAC) with Firebase Custom Claims
+- 🔥 Firestore security rules for fine-grained permissions
+- ⚡ Cloud Functions for claims sync and automation
+- 🧪 Automated tests (Jest, Firebase Emulator)
+- 🚀 CI/CD with GitHub Actions
+
 ## Getting Started
 
-A React Framework for building internal tools, admin panels, dashboards & B2B apps with unmatched flexibility ✨
-
-Refine's hooks and components simplifies the development process and eliminates the repetitive tasks by providing industry-standard solutions for crucial aspects of a project, including authentication, access control, routing, networking, state management, and i18n.
-
-## Available Scripts
-
-### Running the development server.
+### 1. Clone & Install
 
 ```bash
-    npm run dev
+git clone https://github.com/AebrahmRamos/gdgoc-dlsu-internal-hub.git
+cd gdgoc-dlsu-internal-hub/gdg-dlsu-hub
+npm install
 ```
 
-### Building for production.
+### 2. Environment Setup
+
+- Copy `.env.example` to `.env` and fill in secrets.
+- Place your Firebase Admin SDK key as `serviceAccountKey.json`.
+
+### 3. Development
 
 ```bash
-    npm run build
+npm run dev
 ```
 
-### Running the production server.
+### 4. Testing
 
 ```bash
-    npm run start
+npm test
 ```
 
-## Learn More
+Runs Jest tests with the Firebase Emulator.
 
-To learn more about **Refine**, please check out the [Documentation](https://refine.dev/docs)
+### 5. Deployment
 
-- **REST Data Provider** [Docs](https://refine.dev/docs/core/providers/data-provider/#overview)
-- **Material UI** [Docs](https://refine.dev/docs/ui-frameworks/mui/tutorial/)
-- **React Router** [Docs](https://refine.dev/docs/core/providers/router-provider/)
-- **Custom Auth Provider** [Docs](https://refine.dev/docs/core/providers/auth-provider/)
+```bash
+cd functions
+npm run deploy
+```
+
+## RBAC & Custom Claims
+
+- As new users register in Firebase Auth, rerun the seed script to set their claims:
+  ```bash
+  npm run script:seed-claims
+  ```
+  Or, let the Cloud Function handle it automatically when a user's profile is updated in Firestore.
+- Users should sign out and sign back in to refresh their tokens and receive updated claims.
+
+**Note:** Only users registered in Firebase Auth will have custom claims set. If a user is missing permissions, ensure they are registered and rerun the seed script if needed.
+
+## Project Structure
+
+- `src/` — Frontend (React + Refine)
+- `functions/` — Firebase Cloud Functions (TypeScript)
+- `scripts/` — Migration and seeding scripts
+- `.github/workflows/` — CI/CD workflows
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch
+3. Open a pull request
 
 ## License
 
