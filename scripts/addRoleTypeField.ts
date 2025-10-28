@@ -18,6 +18,20 @@ import * as path from 'path';
 
 // Load service account from file
 const serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');
+
+// Validate service account file exists
+if (!fs.existsSync(serviceAccountPath)) {
+  console.error('\n❌ [ERROR] Service account key not found!\n');
+  console.error('Expected location:', serviceAccountPath);
+  console.error('\n📋 To fix this:');
+  console.error('1. Go to Firebase Console → Project Settings → Service Accounts');
+  console.error('2. Click "Generate New Private Key"');
+  console.error('3. Save the downloaded file as "serviceAccountKey.json" in the project root');
+  console.error('4. IMPORTANT: Never commit this file to git (already in .gitignore)\n');
+  console.error('💡 Learn more: https://firebase.google.com/docs/admin/setup#initialize-sdk\n');
+  process.exit(1);
+}
+
 const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf-8'));
 
 // Initialize Firebase Admin
