@@ -51,7 +51,8 @@
     "build": "tsc && refine build",
     "start": "refine start",
     "refine": "refine",
-    "script:add-role-type": "tsx scripts/addRoleTypeField.ts"
+    "script:add-role-type": "tsx scripts/addRoleTypeField.ts",
+    "script:seed-claims": "tsx scripts/seedCustomClaims.ts"
   },
   "browserslist": {
     "production": [
