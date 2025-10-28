@@ -12,7 +12,7 @@
 
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { getRoleType } from '../src/types/team';
+import { getRoleType } from '../src/constants/roleTypes';
 import * as fs from 'fs';
 import * as path from 'path';
 

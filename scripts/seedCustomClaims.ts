@@ -17,6 +17,7 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getRoleType } from '../functions/src/constants/roleTypes';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,40 +32,6 @@ initializeApp({
 
 const auth = getAuth();
 const db = getFirestore();
-
-/**
- * Role type mapping (must match authTriggers.ts)
- */
-const ROLE_TYPE_MAP: Record<string, string> = {
-  'CEO': 'ceo',
-  'chapter-lead': 'ceo',
-  'CTO': 'cxo',
-  'CRO': 'cxo',
-  'COO': 'cxo',
-  'CFO': 'cxo',
-  'CHRO': 'cxo',
-  'CCO': 'cxo',
-  'IndustryPartnershipsLead': 'committee_head',
-  'AcademicCollaborationsLead': 'committee_head',
-  'ProjectEventsPlanningLead': 'committee_head',
-  'LogisticsLead': 'committee_head',
-  'TreasuryLead': 'committee_head',
-  'FundManagementLead': 'committee_head',
-  'EngagementLead': 'committee_head',
-  'FeedbackLead': 'committee_head',
-  'MarketingPromotionsLead': 'committee_head',
-  'MediaCreativesLead': 'committee_head',
-  'MediaCoverageLead': 'committee_head',
-  'CurriculumDevelopmentLead': 'committee_head',
-  'curriculum-development-lead': 'committee_head',
-  'SessionDevelopmentLead': 'committee_head',
-  'SoftwareDevelopmentLead': 'committee_head',
-  'Committee Coordinator': 'committee_head',
-};
-
-function getRoleType(role: string): string {
-  return ROLE_TYPE_MAP[role] || 'officer';
-}
 
 /**
  * Main seed function

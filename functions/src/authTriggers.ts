@@ -9,43 +9,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
-
-// Import role type mapping for validation
-const ROLE_TYPE_MAP: Record<string, string> = {
-  // CEO (Top Executive)
-  'CEO': 'ceo',
-  'chapter-lead': 'ceo',
-  
-  // CxO (C-Suite Executives)
-  'CTO': 'cxo',
-  'CRO': 'cxo',
-  'COO': 'cxo',
-  'CFO': 'cxo',
-  'CHRO': 'cxo',
-  'CCO': 'cxo',
-  
-  // Committee Heads
-  'IndustryPartnershipsLead': 'committee_head',
-  'AcademicCollaborationsLead': 'committee_head',
-  'ProjectEventsPlanningLead': 'committee_head',
-  'LogisticsLead': 'committee_head',
-  'TreasuryLead': 'committee_head',
-  'FundManagementLead': 'committee_head',
-  'EngagementLead': 'committee_head',
-  'FeedbackLead': 'committee_head',
-  'MarketingPromotionsLead': 'committee_head',
-  'MediaCreativesLead': 'committee_head',
-  'MediaCoverageLead': 'committee_head',
-  'CurriculumDevelopmentLead': 'committee_head',
-  'curriculum-development-lead': 'committee_head',
-  'SessionDevelopmentLead': 'committee_head',
-  'SoftwareDevelopmentLead': 'committee_head',
-  'Committee Coordinator': 'committee_head',
-};
-
-function getRoleType(role: string): string {
-  return ROLE_TYPE_MAP[role] || 'officer';
-}
+import { getRoleType } from './constants/roleTypes';
 
 /**
  * Sync custom claims when team document is created or updated
