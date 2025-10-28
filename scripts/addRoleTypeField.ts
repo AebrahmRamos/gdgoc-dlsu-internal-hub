@@ -11,7 +11,7 @@
  */
 
 import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getRoleType } from '../src/types/team';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -62,24 +62,38 @@ async function backfillRoleTypes() {
           continue;
         }
         
-        // Get role from document (could be 'role' or 'position' field)
-        const role = data.role || data.position;
+        // Get role from document
+        // MIGRATION: Production Firestore uses 'position' field (from CSV import)
+        // We're migrating to 'role' field to match TypeScript interface
+        const position = data.position;
+        const existingRole = data.role;
         
-        if (!role) {
-          console.error(`[RBAC] ❌ Error: ${data.email || docId}: No role or position field found`);
+        if (!position && !existingRole) {
+          console.error(`[RBAC] ❌ Error: ${data.email || docId}: No position or role field found`);
           errorCount++;
           continue;
         }
         
+        // Prefer existing 'role' field, fallback to 'position'
+        const role = existingRole || position;
+        
         // Determine roleType
         const roleType = getRoleType(role);
         
-        // Update document
-        await teamRef.doc(docId).update({
+        // Prepare update object
+        const updateData: any = {
           roleType,
-          // Also standardize the role field if it was stored as 'position'
-          ...(data.position && !data.role ? { role: data.position } : {}),
-        });
+          role, // Ensure 'role' field exists with correct value
+        };
+        
+        // If we're migrating from 'position' to 'role', delete the old field
+        if (!existingRole && position) {
+          console.log(`[RBAC] 🔄 Migrating ${data.email || docId}: position="${position}" → role="${role}"`);
+          updateData.position = FieldValue.delete();
+        }
+        
+        // Update document
+        await teamRef.doc(docId).update(updateData);
         
         console.log(`[RBAC] ✅ Updated ${data.email || docId}: role="${role}" → roleType="${roleType}"`);
         successCount++;

@@ -88,6 +88,7 @@ export const updateAuthClaims = onDocumentWritten(
     if (beforeData) {
       const relevantFieldsChanged = 
         beforeData.role !== afterData.role ||
+        beforeData.position !== afterData.position || // Support legacy 'position' field
         beforeData.roleType !== afterData.roleType ||
         beforeData.department !== afterData.department ||
         beforeData.committee !== afterData.committee;
@@ -98,7 +99,10 @@ export const updateAuthClaims = onDocumentWritten(
       }
     }
     
-    const role = afterData.role || afterData.position; // Support legacy 'position' field
+    // Get role from either 'role' or 'position' field
+    // MIGRATION NOTE: Older documents use 'position', newer use 'role'
+    // The backfill script migrates position → role
+    const role = afterData.role || afterData.position;
     const department = afterData.department;
     const committee = afterData.committee;
     
