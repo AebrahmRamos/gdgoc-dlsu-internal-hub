@@ -127,10 +127,11 @@ service cloud.firestore {
       allow update: if isCEO();
       
       // CHRO can update team members, but only specific fields
-      // Cannot modify: email, id, createdAt, claimsUpdatedAt
+      // CRITICAL: CHRO cannot modify role, roleType, or position (prevents privilege escalation)
+      // CHRO can only update: name, department, committee
       allow update: if hasRole('CHRO') && 
-        onlyUpdatingFields(['name', 'role', 'roleType', 'department', 'committee', 'position']) &&
-        notModifyingFields(['email', 'id', 'createdAt', 'claimsUpdatedAt']);
+        onlyUpdatingFields(['name', 'department', 'committee']) &&
+        notModifyingFields(['email', 'id', 'role', 'roleType', 'position', 'createdAt', 'claimsUpdatedAt']);
     }
     
     // ============================================================
