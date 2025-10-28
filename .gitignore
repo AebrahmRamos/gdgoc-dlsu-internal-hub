@@ -30,3 +30,8 @@ functions/.env
 dist/
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
+
+# Documentation - keep local only
+docs/
+*.md
+!README.md
