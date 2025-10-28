@@ -12,8 +12,11 @@ import {
   query,
   where,
   getDocs,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { app } from "./firebase";
+import type { UserIdentity, RoleType } from "./types/team";
 
 const auth = getAuth(app);
 const firestore = getFirestore(app);
@@ -41,7 +44,7 @@ export const authProvider: AuthProvider = {
 
       return { success: true, redirectTo: "/" };
     } catch (error: any) {
-      console.error("Login error", error);
+      console.error("[Auth] Login error:", error);
       return { success: false, error };
     }
   },
@@ -66,20 +69,70 @@ export const authProvider: AuthProvider = {
 
   getPermissions: async () => null,
 
-  getIdentity: async () => {
+  getIdentity: async (): Promise<UserIdentity | null> => {
     const user = auth.currentUser;
-    if (!user?.email) return null;
+    if (!user?.email) {
+      console.warn("[Auth] No current user");
+      return null;
+    }
 
-    const teamRef = collection(firestore, "team");
-    const q = query(teamRef, where("email", "==", user.email));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const docSnap = snap.docs[0];
-    return { id: docSnap.id, ...(docSnap.data() as any) };
+    try {
+      // Get ID token with custom claims (preferred source)
+      const tokenResult = await user.getIdTokenResult(false);
+      
+      // Get additional data from Firestore (for name and other fields not in claims)
+      const teamRef = collection(firestore, "team");
+      const q = query(teamRef, where("email", "==", user.email));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        console.warn("[Auth] User not found in team collection:", user.email);
+        return null;
+      }
+      
+      const docSnap = snap.docs[0];
+      const userData = docSnap.data();
+      
+      // Prefer custom claims, fallback to Firestore if claims not set yet
+      const role = (tokenResult.claims.role as string) || userData.role || userData.position;
+      const roleType = (tokenResult.claims.roleType as RoleType) || userData.roleType;
+      const department = (tokenResult.claims.department as string) || userData.department;
+      const committee = (tokenResult.claims.committee as string) || userData.committee;
+      
+      // Warn if claims are missing (they should be set by the Cloud Function)
+      if (!tokenResult.claims.role || !tokenResult.claims.roleType) {
+        console.warn("[Auth] Custom claims not set yet for user:", user.email);
+        console.warn("[Auth] Using Firestore fallback. Claims should be set soon.");
+      }
+      
+      const identity: UserIdentity = {
+        id: docSnap.id,
+        email: user.email,
+        name: userData.name || user.displayName || '',
+        role,
+        roleType,
+        department,
+        committee,
+      };
+      
+      console.log("[Auth] User identity:", {
+        email: identity.email,
+        role: identity.role,
+        roleType: identity.roleType,
+        department: identity.department,
+        fromClaims: !!tokenResult.claims.role,
+      });
+      
+      return identity;
+      
+    } catch (error) {
+      console.error("[Auth] Error getting identity:", error);
+      return null;
+    }
   },
 
   onError: async (error) => {
-    console.error(error);
+    console.error("[Auth] Error:", error);
     return { error };
   },
 };

@@ -21,6 +21,8 @@ import dataProvider from "@refinedev/simple-rest";
 import firebaseProvider from "./firebaseProvider";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router";
 import { authProvider } from "./authProvider";
+import { accessControlProvider } from "./providers/accessControlProvider";
+import { AuthContextProvider } from "./contexts/AuthContext";
 import { Header } from "./components/header";
 import { Title } from "./components/title";
 import { ColorModeContextProvider } from "./contexts/color-mode";
@@ -42,16 +44,18 @@ function App() {
     <BrowserRouter>
       <RefineKbarProvider>
         <ColorModeContextProvider>
-          <CssBaseline />
-          <GlobalStyles styles={{ html: { WebkitFontSmoothing: "auto" } }} />
-          <RefineSnackbarProvider>
-            <DevtoolsProvider>
-              <Refine
-                dataProvider={firebaseProvider()}
-                notificationProvider={useNotificationProvider}
-                routerProvider={routerProvider}
-                authProvider={authProvider}
-                resources={[
+          <AuthContextProvider>
+            <CssBaseline />
+            <GlobalStyles styles={{ html: { WebkitFontSmoothing: "auto" } }} />
+            <RefineSnackbarProvider>
+              <DevtoolsProvider>
+                <Refine
+                  dataProvider={firebaseProvider()}
+                  notificationProvider={useNotificationProvider}
+                  routerProvider={routerProvider}
+                  authProvider={authProvider}
+                  accessControlProvider={accessControlProvider}
+                  resources={[
                   {
                     name: "partners",
                     list: "/partners",
@@ -141,6 +145,7 @@ function App() {
               <DevtoolsPanel />
             </DevtoolsProvider>
           </RefineSnackbarProvider>
+          </AuthContextProvider>
         </ColorModeContextProvider>
       </RefineKbarProvider>
     </BrowserRouter>

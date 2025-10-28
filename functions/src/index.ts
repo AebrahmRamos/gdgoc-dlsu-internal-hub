@@ -1,6 +1,7 @@
 /**
  * Firebase Cloud Functions for GDG-DLSU Internal Hub
  * - DigitalOcean Spaces integration for file uploads
+ * - Custom claims management for RBAC
  */
 
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -18,6 +19,9 @@ config();
 // Initialize Firebase Admin
 initializeApp();
 const db = getFirestore();
+
+// Export RBAC functions
+export { updateAuthClaims } from "./authTriggers";
 
 // Configure DigitalOcean Spaces S3 client
 const s3Client = new S3Client({
